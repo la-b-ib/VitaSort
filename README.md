@@ -146,8 +146,8 @@ httpx==0.23.0
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/labibbinshahed/vitasort.git
-   ```
+   git clone https://github.com/la-b-ib/vitasort.git
+   ``
 
 2. Navigate to the project directory:
    ```bash
