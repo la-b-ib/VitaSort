@@ -1,3 +1,86 @@
+
+# Contributing to VitaSort
+
+Thank you for your interest in contributing to VitaSort! We welcome contributions that enhance the features, usability, and impact of our AI-powered resume classification and career development platform. By contributing to VitaSort, you are helping job seekers, organizations, and developers worldwide.
+
+## How to Contribute
+
+### 1. Reporting Bugs
+If you find any bugs or issues, please report them by creating a new [issue](https://github.com/la-b-ib/VitaSort/issues). Include:
+- A clear and descriptive title.
+- Steps to reproduce the issue.
+- Expected and actual results.
+- Environment details (e.g., OS, Python version).
+
+### 2. Proposing Features or Enhancements
+We love fresh ideas! If you have suggestions for new features or improvements:
+1. Check the [issues](https://github.com/la-b-ib/VitaSort/issues) to ensure it hasn’t been suggested.
+2. Open a new issue to discuss your idea.
+3. Once approved, you can work on a pull request.
+
+### 3. Submitting Code
+Before submitting code:
+1. Fork the repository.
+2. Create a feature branch:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. Commit your changes with a meaningful message:
+   ```bash
+   git commit -m "Add your feature description"
+   ```
+4. Push your changes:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+5. Open a pull request and describe your changes in detail.
+
+### 4. Writing Documentation
+Ensure your contributions include:
+- Clear and concise documentation (e.g., code comments, updated README).
+- Examples of usage where applicable.
+
+### 5. Testing Your Code
+We prioritize code quality. Please include tests for your code changes:
+- Run existing tests to ensure compatibility.
+- Add new tests for new features or changes.
+- Use `pytest` to execute tests:
+  ```bash
+  pytest
+  ```
+
+## Code of Conduct
+By contributing to VitaSort, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md). Be respectful and collaborative.
+
+## Development Setup
+To set up the project on your local machine:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/la-b-ib/VitaSort.git
+   cd VitaSort
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Install system dependencies for Tesseract OCR (if applicable).
+
+4. Run the application:
+   ```bash
+   python -m vitasort.app
+   ```
+
+## Style Guide
+- Follow [PEP 8](https://peps.python.org/pep-0008/) for Python code.
+- Use descriptive variable and function names.
+- Format your code with `black`:
+  ```bash
+  black .
+  ```
+
+
+
+
 ## Project Documentation
 
 <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center; flex-wrap: wrap;">
