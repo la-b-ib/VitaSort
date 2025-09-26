@@ -1,5 +1,12 @@
 import streamlit as st
-from PyPDF2 import PdfReader
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        st.error("PDF processing library not found. Please install PyPDF2 or pypdf.")
+        st.stop()
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
