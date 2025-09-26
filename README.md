@@ -1,31 +1,41 @@
-# 🍎 VitaSort - AI-Powered Resume Screening & Ranking System
+# 🍎 VitaSort <a href=""><img align="left" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/artificial-intelligence.gif"></a>
+
+
+
+**VitaSort** is an intelligent AI-powered resume screening and ranking system that streamlines the hiring process using advanced machine learning algorithms. Built with Streamlit, it provides comprehensive analysis through multiple visualization techniques and similarity scoring.
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.3-orange?style=for-the-badge)](README.md)
 
-**VitaSort** is an intelligent AI-powered resume screening and ranking system that streamlines the hiring process using advanced machine learning algorithms. Built with Streamlit, it provides comprehensive analysis through multiple visualization techniques and similarity scoring.
+<hr>
 
-## ✨ Features
+## Core Functionality <a href=""><img align="right" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/learning.gif"></a>
 
-### Core Functionality
-- **🎯 AI-Powered Ranking**: Utilizes TF-IDF vectorization and cosine similarity for accurate resume matching
-- **📊 Multi-Dimensional Analysis**: Comprehensive evaluation across 5+ skill dimensions
-- **📈 Real-time Processing**: Instant analysis and ranking of multiple PDF resumes
-- **🎨 Interactive Visualizations**: Advanced charts and graphs for deeper insights
+- **AI-Powered Ranking**: Utilizes TF-IDF vectorization and cosine similarity for accurate resume matching
+- **Multi-Dimensional Analysis**: Comprehensive evaluation across 5+ skill dimensions
+- **Real-time Processing**: Instant analysis and ranking of multiple PDF resumes
+- **Interactive Visualizations**: Advanced charts and graphs for deeper insights
 
-### Advanced Analytics
-- **🌟 Radar Chart Analysis**: Multi-dimensional candidate profiling across technical skills, experience, education, and communication
-- **📊 Parallel Coordinates Visualization**: Interactive multi-variate analysis for pattern recognition
-- **☁️ Word Cloud Comparison**: Visual keyword analysis between job descriptions and top resumes
-- **🔥 Skills Heatmap**: Comprehensive skill matching matrix with color-coded intensity
+<hr>
 
-### User Experience
-- **🖥️ Clean Web Interface**: Intuitive Streamlit-based dashboard
-- **📱 Responsive Design**: Works seamlessly across different screen sizes
-- **⚡ Fast Performance**: Optimized algorithms for quick processing
-- **📄 PDF Support**: Direct upload and text extraction from PDF resumes
+
+## Advanced Analytics
+- **Radar Chart Analysis**: Multi-dimensional candidate profiling across technical skills, experience, education, and communication
+- **Parallel Coordinates Visualization**: Interactive multi-variate analysis for pattern recognition
+- **Word Cloud Comparison**: Visual keyword analysis between job descriptions and top resumes
+- **Skills Heatmap**: Comprehensive skill matching matrix with color-coded intensity
+
+<hr>
+
+## User Experience <a href=""><img align="right" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/recruitment.gif"></a>
+- **Clean Web Interface**: Intuitive Streamlit-based dashboard
+- **Responsive Design**: Works seamlessly across different screen sizes
+- **Fast Performance**: Optimized algorithms for quick processing
+- **PDF Support**: Direct upload and text extraction from PDF resumes
+
+<hr>
 
 ## 🛠️ Technology Stack
 
