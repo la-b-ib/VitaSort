@@ -108,7 +108,8 @@ def rank_resumes(job_description, resumes)
 
 ##  Algorithm Details
 
-### TF-IDF Vectorization
+### TF-IDF Vectorization <a href=""><img align="right" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/ai-assistant.gif"></a>
+
 VitaSort uses **Term Frequency-Inverse Document Frequency** to:
 - Convert text documents into numerical vectors
 - Weight terms based on importance and rarity
@@ -116,8 +117,8 @@ VitaSort uses **Term Frequency-Inverse Document Frequency** to:
 
 <hr>
 
-### Cosine Similarity
-The system calculates similarity using:
+## Cosine Similarity  <a href=""><img align="right" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/cv.gif"></a>
+
 - Dot product of normalized vectors
 - Measures angle between document vectors
 - Ranges from 0 (no similarity) to 1 (identical)
@@ -125,9 +126,8 @@ The system calculates similarity using:
 
 <hr>
 
-## Performance Metrics
+## Performance Metrics <a href=""><img align="right" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/turing-test.gif"></a>
 
-### Processing Capabilities
 - **File Size**: Handles PDFs up to 50MB
 - **Batch Processing**: Supports 500+ resumes simultaneously
 - **Accuracy**: 94-98% relevance matching based on testing
@@ -150,9 +150,10 @@ st.set_page_config(
 <hr>
 
 
-## 📝 Version History
+## Version History
 
-### v2.3 (Current)
+
+### v2.3 (Current) <a href=""><img align="right" width="150" height="150" src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/gif/neural-network.gif"></a>
 - Enhanced radar chart analysis
 - Improved parallel coordinates visualization
 - Advanced skills heatmap
