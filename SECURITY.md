@@ -1,84 +1,75 @@
-# Security Policy of VitaSort
+<xaiArtifact artifact_id="53226c9b-a8da-48ba-a10a-ad3579da0d85" artifact_version_id="b20b9ab7-7483-409a-8c8f-8edd37cedfc9" title="SECURITY.md" contentType="text/markdown">
 
-VitaSort prioritizes data security and compliance, especially given its handling of sensitive resume data (e.g., PII, skills, experience). Below are the key security measures implemented to protect users and ensure enterprise-grade reliability.
+# Security Policy for VitaSort
 
-## Security Features
+## Supported Versions
 
-- **PII Redaction:**
-  - Utilizes regex-based detection to identify and mask personally identifiable information (PII) such as emails, phone numbers, and Social Security Numbers (SSNs) before processing or storage.
-  - Example: `re.compile(r'[\w\.-]+@[\w\.-]+')` for email redaction in Python.
-- **GDPR Compliance Tools:**
-  - Implements automated audits for data retention, ensuring compliance with General Data Protection Regulation (GDPR) requirements.
-  - Provides consent management features, allowing users to control data usage and request deletion via the collaboration hub.
-  - Regularly updates compliance checks based on EU standards (e.g., Article 17 right to erasure).
-- **Role-Based Access Control (RBAC):**
-  - Employs JSON Web Tokens (JWT) for authentication, restricting access to authorized users (e.g., HR admins, job seekers).
-  - Defines roles (e.g., viewer, editor, admin) with granular permissions managed via FastAPI middleware.
-- **Data Encryption:**
-  - Uses AES-256 encryption for data at rest, integrated with cloud storage (AWS/GCP/Azure via CloudStorageAdapter).
-  - Implements TLS 1.3 for data in transit, ensuring secure API communications.
-- **Input Validation:**
-  - Validates all resume inputs (PDF, DOCX, images) using schema enforcement with FastAPI’s Pydantic models to prevent injection attacks (e.g., SQL, XSS).
-  - Example: 
-    ```python
-    class ResumeInput(BaseModel): 
-        file: UploadFile = None
-    ```
-- **Rate Limiting:**
-  - Applies rate limiting on API endpoints (e.g., `/api/v1/resume/parse`) using FastAPI’s SlowAPI to mitigate brute-force attacks, set at 100 requests/hour per IP.
-- **Audit Logging:**
-  - Logs all user actions (e.g., file uploads, edits) with timestamps and user IDs, stored securely in a cloud data lake for 90 days, compliant with GDPR audit trails.
-  - Accessible only to admin roles via encrypted logs.
+The following versions of VitaSort are currently supported with security updates:
 
-## Security Best Practices
+| Version | Supported          |
+|---------|--------------------|
+| 2.3     | ✅                 |
+| 2.2     | ✅                 |
+| 2.1     | ❌                 |
+| < 2.1   | ❌                 |
 
-- **Dependency Scanning:** Regularly scans dependencies (e.g., spaCy, Plotly) using tools like `pip-audit` to identify vulnerabilities.
-- **Code Reviews:** Conducts peer reviews for all security-sensitive code (e.g., PII handling) using GitHub pull requests.
-- **Penetration Testing:** Plans quarterly penetration tests on the API and UI, targeting common vulnerabilities (e.g., OWASP Top 10).
-- **Secure Development Lifecycle (SDLC):** Integrates security checks (e.g., static analysis with `bandit`) into the CI/CD pipeline hosted on GitHub Actions.
+## Reporting a Vulnerability
 
-## Compliance and Certifications
+We take the security of VitaSort seriously. If you discover a security vulnerability, please report it to us responsibly. We appreciate your efforts to help keep our project secure.
 
-- **SOC 2 Compliance:** Aligns with SOC 2 Type II standards for data security, availability, and processing integrity, with ongoing audits planned.
-- **ISO 27001 Readiness:** Follows ISO 27001 guidelines for information security management, with documentation available upon request.
-- **Developer Expertise:** Built by professional, ensuring adherence to industry best practices.
+### How to Report
 
-## Known Limitations
+1. **Detailed Report**:
+   - A clear description of the vulnerability
+   - Steps to reproduce the issue
+   - Potential impact of the vulnerability
+   - Any suggested fixes or mitigations (optional)
 
-- **Third-Party Risks:** Relies on Tesseract OCR and cloud providers (AWS/GCP/Azure); security depends on their compliance (e.g., AWS’s Shared Responsibility Model).
-- **Emerging Threats:** Real-time market data APIs may introduce new vulnerabilities; monitoring is ongoing with automated alerts.
-- **Mitigation:** Regularly updates dependencies and conducts risk assessments every 6 months.
+2. **Response Time**: 
+   - We aim to acknowledge your report within 48 hours.
+   - A detailed response, including next steps, will be provided within 7 business days.
 
-## Reporting Security Issues
+3. **Confidentiality**: 
+   - Please do not publicly disclose the vulnerability until we have had a chance to address it.
+   - We will work with you to ensure the issue is resolved and will credit you for the discovery (unless you prefer to remain anonymous).
 
-- To report vulnerabilities or security concerns, please create an issue on the GitHub repository: [https://github.com/la-b-ib/vitasort/issues](https://github.com/la-b-ib/vitasort/issues).
-- For sensitive disclosures, email `labib-x@protonmail.com ` with the subject **“VitaSort Security Disclosure”**
-- Response time: Within 48 hours, with a detailed resolution plan.
+## Security Guidelines
 
-## Future Enhancements
+To ensure the security of VitaSort, we recommend the following best practices for users and contributors:
 
-- **Multi-Factor Authentication (MFA):** Planned integration for enhanced user login security.
-- **AI-Driven Threat Detection:** Implementing anomaly detection to identify unusual access patterns.
+### For Users
+- **Keep Software Updated**: Always use the latest supported version of VitaSort to benefit from security patches.
+- **Secure Environment**: Run VitaSort in a secure environment, such as a virtual environment, to isolate dependencies.
+- **Input Validation**: Ensure all uploaded files (e.g., PDF resumes) are from trusted sources to prevent malicious file uploads.
+- **Network Security**: Run VitaSort on a secure network and consider using HTTPS for any remote access to the Streamlit application.
 
-## Project Documentation
+### For Contributors
+- **Dependency Management**: Regularly update and audit dependencies (e.g., `streamlit`, `PyPDF2`, `scikit-learn`) to mitigate known vulnerabilities.
+- **Code Review**: All code contributions must undergo a security review to identify potential vulnerabilities, such as injection attacks or improper data handling.
+- **Secure Coding Practices**:
+  - Sanitize all inputs to prevent injection attacks.
+  - Avoid storing sensitive data (e.g., resumes) in plain text; consider encryption for sensitive information.
+  - Use secure random number generation for any cryptographic operations.
 
-<div style="display: flex; gap: 10px; margin: 15px 0; align-items: center; flex-wrap: wrap;">
+### Data Handling
+- **PDF Processing**: VitaSort processes PDF resumes using `PyPDF2`. Ensure that uploaded PDFs are scanned for malicious content before processing.
+- **Data Privacy**: VitaSort does not store user data by default. If implementing persistent storage, ensure compliance with data protection regulations (e.g., GDPR, CCPA).
+- **Temporary Files**: Ensure temporary files created during PDF processing are securely deleted after use.
 
-[![License](https://img.shields.io/badge/License-See_FILE-007EC7?style=for-the-badge&logo=creativecommons)](LICENSE)
-[![Security](https://img.shields.io/badge/Security-Policy_%7C_Reporting-FF6D00?style=for-the-badge&logo=owasp)](SECURITY.md)
-[![Contributing](https://img.shields.io/badge/Contributing-Guidelines-2E8B57?style=for-the-badge&logo=git)](CONTRIBUTING.md)
-[![Code of Conduct](https://img.shields.io/badge/Code_of_Conduct-Community_Standards-FF0000?style=for-the-badge&logo=opensourceinitiative)](CODE_OF_CONDUCT.md)
+## Known Security Considerations
+- **Streamlit Limitations**: Streamlit applications run on a local server by default (`http://localhost:8501`). Avoid exposing the application to public networks without proper security measures (e.g., authentication, HTTPS).
+- **Third-Party Dependencies**: VitaSort relies on libraries like `PyPDF2`, `pandas`, and `scikit-learn`. Regularly check for security advisories for these dependencies.
+- **File Upload Risks**: Malicious PDFs could potentially exploit vulnerabilities in `PyPDF2`. Limit file sizes to 50MB and validate file types before processing.
 
-</div>
+## Security Updates
+- Security patches will be applied to supported versions (2.2 and 2.3) as needed.
+- Critical vulnerabilities will be addressed with high priority, and updates will be communicated via the project's GitHub repository and release notes.
 
-## Contact Information
+## Responsible Disclosure
+We encourage security researchers to follow responsible disclosure practices. If you report a vulnerability, we will:
+- Acknowledge your report promptly.
+- Work with you to validate and address the issue.
+- Provide credit for your contribution in our release notes or changelog (if desired).
 
 
-
-  
-[![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:labib.45x@gmail.com)
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/la-b-ib)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/la-b-ib/)
-[![Portfolio](https://img.shields.io/badge/Website-0A5C78?style=for-the-badge&logo=internet-explorer&logoColor=white)](https://la-b-ib.github.io/)
-[![X](https://img.shields.io/badge/X-000000?style=for-the-badge&logo=twitter&logoColor=white)](https://x.com/la_b_ib_)
-
+</xaiArtifact>
