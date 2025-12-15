@@ -67,44 +67,91 @@ st.title("VitaSort")
 def pdf_to_text(data: bytes) -> Tuple[str, Optional[dict]]:
     meta = None
     text = ""
+    
+    # Try pdfminer first (best for text extraction)
     try:
         from pdfminer.high_level import extract_text
-
         with io.BytesIO(data) as fh:
-            text = extract_text(fh) or ""
+            extracted = extract_text(fh)
+            if extracted and len(extracted.strip()) > 10:
+                text = extracted
     except Exception:
         pass
+    
+    # Try pypdf/PyPDF2 as fallback or supplement
     try:
         from pypdf import PdfReader
-
         with io.BytesIO(data) as fh:
             reader = PdfReader(fh)
-            if not text:
-                parts = [p.extract_text() or "" for p in reader.pages]
-                text = "\n".join(parts)
-            md = reader.metadata
-            if md:
-                meta = {k: str(v) for k, v in md.items()}
+            
+            # If no text from pdfminer, extract from pypdf
+            if not text or len(text.strip()) < 50:
+                parts = []
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        parts.append(page_text)
+                if parts:
+                    text = "\n\n".join(parts)
+            
+            # Extract metadata
+            try:
+                md = reader.metadata
+                if md:
+                    meta = {k: str(v) for k, v in md.items()}
+            except Exception:
+                pass
+                
     except Exception:
         pass
-    return text, meta
+    
+    # Clean up extracted text
+    if text:
+        # Remove excessive whitespace
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+        text = re.sub(r' +', ' ', text)
+        # Remove control characters except newlines and tabs
+        text = ''.join(char for char in text if char.isprintable() or char in '\n\t')
+    
+    return text.strip(), meta
 
 
 def docx_to_text(data: bytes) -> str:
     try:
         import docx
-
         with io.BytesIO(data) as fh:
             d = docx.Document(fh)
-            return "\n".join(p.text for p in d.paragraphs)
+            text_parts = []
+            
+            # Extract paragraphs
+            for p in d.paragraphs:
+                if p.text.strip():
+                    text_parts.append(p.text)
+            
+            # Extract text from tables
+            for table in d.tables:
+                for row in table.rows:
+                    row_text = ' | '.join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                    if row_text:
+                        text_parts.append(row_text)
+            
+            result = "\n".join(text_parts)
+            if result:
+                return result
     except Exception:
-        try:
-            import docx2txt  # type: ignore
-
-            with io.BytesIO(data) as fh:
-                return docx2txt.process(fh) or ""
-        except Exception:
-            return ""
+        pass
+    
+    # Fallback to docx2txt
+    try:
+        import docx2txt  # type: ignore
+        with io.BytesIO(data) as fh:
+            result = docx2txt.process(fh)
+            if result:
+                return result
+    except Exception:
+        pass
+    
+    return ""
 
 
 def rtf_to_text(data: bytes) -> str:
@@ -116,94 +163,472 @@ def rtf_to_text(data: bytes) -> str:
         return ""
 
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-PHONE_RE = re.compile(r"(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,4}")
-LINKEDIN_RE = re.compile(r"https?://(?:www\.)?linkedin\.com/[^\s]+", re.I)
-GITHUB_RE = re.compile(r"https?://(?:www\.)?github\.com/[^\s]+", re.I)
-URL_RE = re.compile(r"https?://[^\s]+", re.I)
-YEAR_RANGE_RE = re.compile(r"(\b\d{4}\b)\s*[-–]\s*(\b\d{4}\b|Present|Current)", re.I)
-YEAR_RE = re.compile(r"(19\d{2}|20\d{2})")
+EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+PHONE_RE = re.compile(r"(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{1,4}\)?[\s.-]?)?\d{1,4}[\s.-]?\d{1,4}[\s.-]?\d{1,9}")
+LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_-]+/?|linkedin\.com/in/[A-Za-z0-9_-]+", re.I)
+GITHUB_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_-]+/?|github\.com/[A-Za-z0-9_-]+", re.I)
+PORTFOLIO_RE = re.compile(r"(?:portfolio|website|blog)\s*:?\s*(https?://[^\s]+)", re.I)
+URL_RE = re.compile(r"https?://[^\s<>\"]+", re.I)
+YEAR_RANGE_RE = re.compile(r"(\b\d{4}\b)\s*[-–—to]\s*(\b\d{4}\b|Present|Current|Now|Till date|Till now|Ongoing)", re.I)
+MONTH_YEAR_RE = re.compile(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(\d{4})", re.I)
+YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 
 
 SKILLS = {
-    "programming": ["python", "java", "javascript", "typescript", "c++", "c#", "go", "rust", "ruby", "php"],
-    "data": ["sql", "nosql", "postgres", "mysql", "mongodb", "data engineering", "etl", "spark", "hadoop"],
-    "ml_ai": ["machine learning", "deep learning", "nlp", "computer vision", "scikit-learn", "pytorch", "tensorflow", "transformers"],
-    "analytics": ["excel", "powerbi", "tableau", "looker", "analytics", "statistics"],
-    "cloud": ["aws", "azure", "gcp", "kubernetes", "docker", "terraform", "serverless"],
-    "web": ["react", "vue", "angular", "django", "flask", "fastapi", "node", "express"],
-    "soft": ["communication", "leadership", "teamwork", "problem solving", "presentation"],
+    "programming": ["python", "java", "javascript", "typescript", "c++", "c#", "go", "rust", "ruby", "php", "swift", "kotlin", "scala", "r", "matlab", "perl", "shell", "bash", "powershell"],
+    "data": ["sql", "nosql", "postgres", "postgresql", "mysql", "mongodb", "redis", "cassandra", "elasticsearch", "data engineering", "etl", "spark", "hadoop", "kafka", "airflow", "databricks", "snowflake", "bigquery"],
+    "ml_ai": ["machine learning", "deep learning", "nlp", "natural language processing", "computer vision", "scikit-learn", "pytorch", "tensorflow", "keras", "transformers", "hugging face", "opencv", "yolo", "bert", "gpt", "llm", "generative ai"],
+    "analytics": ["excel", "powerbi", "power bi", "tableau", "looker", "analytics", "statistics", "data analysis", "data visualization", "pandas", "numpy", "matplotlib", "seaborn", "plotly"],
+    "cloud": ["aws", "amazon web services", "azure", "microsoft azure", "gcp", "google cloud", "kubernetes", "k8s", "docker", "terraform", "ansible", "jenkins", "ci/cd", "serverless", "lambda", "ec2", "s3"],
+    "web": ["react", "reactjs", "vue", "vuejs", "angular", "django", "flask", "fastapi", "node", "nodejs", "express", "next.js", "nuxt", "svelte", "html", "css", "sass", "tailwind", "bootstrap"],
+    "mobile": ["android", "ios", "react native", "flutter", "swift", "kotlin", "xamarin", "cordova", "ionic"],
+    "devops": ["devops", "ci/cd", "jenkins", "gitlab", "github actions", "circleci", "travis", "docker", "kubernetes", "terraform", "ansible", "chef", "puppet", "monitoring", "prometheus", "grafana"],
+    "testing": ["testing", "unit testing", "integration testing", "jest", "pytest", "selenium", "cypress", "junit", "testng", "qa", "quality assurance", "automation"],
+    "database": ["database", "dbms", "sql", "nosql", "oracle", "mssql", "sqlite", "dynamodb", "couchdb", "neo4j", "graph database"],
+    "security": ["security", "cybersecurity", "penetration testing", "ethical hacking", "owasp", "encryption", "ssl", "tls", "authentication", "oauth", "jwt", "firewall"],
+    "soft": ["communication", "leadership", "teamwork", "team work", "problem solving", "critical thinking", "presentation", "agile", "scrum", "project management", "time management", "collaboration", "mentoring", "coaching"],
 }
 
 
 def extract_contacts(text: str) -> Dict[str, Optional[str]]:
-    email = (EMAIL_RE.findall(text) or [None])[0]
-    phone = (PHONE_RE.findall(text) or [None])[0]
+    """ENHANCED contact extraction with better name detection and multiple fallback strategies"""
+    emails = EMAIL_RE.findall(text)
+    email = emails[0] if emails else None
+    
+    phones = PHONE_RE.findall(text)
+    # Filter out very short phone numbers (likely false positives)
+    valid_phones = [p for p in phones if len(re.sub(r'[^\d]', '', p)) >= 7]
+    phone = valid_phones[0] if valid_phones else None
+    
     name = None
-    for line in text.splitlines():
+    lines = text.splitlines()
+    
+    # Try multiple name extraction strategies - ENHANCED
+    for i, line in enumerate(lines[:20]):  # Check first 20 lines (increased from 15)
         s = line.strip()
-        if 3 <= len(s) <= 80 and 2 <= len(s.split()) <= 4:
-            caps = sum(1 for w in s.split() if w[:1].isupper())
-            if caps >= max(2, len(s.split()) - 1):
+        if not s or len(s) < 3 or len(s) > 100:
+            continue
+            
+        words = s.split()
+        if not (2 <= len(words) <= 6):  # Allow up to 6 words for full names with titles
+            continue
+        
+        # Strategy 1: Look for capitalized words (typical name format)
+        caps = sum(1 for w in words if w and w[0].isupper())
+        if caps >= max(2, len(words) - 1):
+            # Avoid email, phone, URLs, common headers in name
+            if not any(x in s.lower() for x in ['@', 'http', '.com', '.net', '.org', 'phone', 'email', 'resume', 'cv', 'curriculum', 'vitae', 'address', 'linkedin', 'github', 'portfolio']):
+                # Avoid lines with too many numbers (addresses, phone numbers)
+                if sum(c.isdigit() for c in s) < len(s) * 0.3:
+                    name = s
+                    break
+        
+        # Strategy 2: Look for explicit name labels
+        if any(keyword in s.lower() for keyword in ['name:', 'full name:', 'candidate:', 'applicant:', 'personal details']):
+            name_part = re.sub(r'(?i)(full\s+)?name\s*:?\s*|candidate\s*:?\s*|applicant\s*:?\s*|personal\s+details\s*:?\s*', '', s).strip()
+            if 3 <= len(name_part) <= 80:
+                name = name_part
+                break
+        
+        # Strategy 3: First line if it looks like a name (2-4 capitalized words, no special chars)
+        if i == 0 and 2 <= len(words) <= 4:
+            if all(w[0].isupper() for w in words if w) and not re.search(r'[^\w\s\.]', s):
                 name = s
                 break
+    
+    # If still no name found, try to extract from email
+    if not name and email:
+        username = email.split('@')[0]
+        # Convert common email formats to names
+        name_guess = username.replace('.', ' ').replace('_', ' ').replace('-', ' ')
+        # Only use if it looks like a real name (2+ parts, reasonable length)
+        parts = name_guess.split()
+        if len(parts) >= 2 and 3 <= len(name_guess) <= 50:
+            name = name_guess.title()
+    
     return {"name": name, "email": email, "phone": phone}
 
 
 def extract_social(text: str) -> Dict[str, List[str]]:
-    return {"linkedin": LINKEDIN_RE.findall(text) or [], "github": GITHUB_RE.findall(text) or [], "all": URL_RE.findall(text) or []}
+    """Extract ALL URLs and categorize by platform - works with any custom platform"""
+    # Extract all URLs (with or without http/https)
+    all_urls = list(set(URL_RE.findall(text)))
+    
+    # Also find URLs without protocol
+    url_pattern_no_protocol = re.compile(r'\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/[^\s]*)?', re.I)
+    urls_no_protocol = [url for url in url_pattern_no_protocol.findall(text) 
+                        if '.' in url and not url.endswith('.') 
+                        and len(url) > 5 and not url[0].isdigit()]
+    
+    # Combine and deduplicate
+    all_urls_combined = list(set(all_urls + ['https://' + u if not u.startswith('http') else u for u in urls_no_protocol]))
+    
+    # Platform categorization with flexible matching
+    linkedin = [url for url in all_urls_combined if 'linkedin.com' in url.lower()]
+    github = [url for url in all_urls_combined if 'github.com' in url.lower() or 'gitlab.com' in url.lower()]
+    twitter = [url for url in all_urls_combined if 'twitter.com' in url.lower() or 'x.com' in url.lower()]
+    stackoverflow = [url for url in all_urls_combined if 'stackoverflow.com' in url.lower()]
+    medium = [url for url in all_urls_combined if 'medium.com' in url.lower()]
+    behance = [url for url in all_urls_combined if 'behance.net' in url.lower()]
+    dribbble = [url for url in all_urls_combined if 'dribbble.com' in url.lower()]
+    
+    # Detect portfolio/personal sites (common indicators)
+    portfolio_keywords = ['portfolio', 'website', 'blog', 'personal']
+    portfolio = [url for url in all_urls_combined if any(kw in url.lower() for kw in portfolio_keywords)]
+    
+    # Custom platforms - anything not in known categories
+    known_platforms = set(linkedin + github + twitter + stackoverflow + medium + behance + dribbble + portfolio)
+    custom = [url for url in all_urls_combined if url not in known_platforms]
+    
+    return {
+        "linkedin": linkedin,
+        "github": github,
+        "portfolio": portfolio,
+        "twitter": twitter,
+        "stackoverflow": stackoverflow,
+        "medium": medium,
+        "behance": behance,
+        "dribbble": dribbble,
+        "custom": custom,  # NEW: Any other platform URLs
+        "all": all_urls_combined
+    }
 
 
 def extract_education(text: str) -> List[dict]:
     out = []
-    degree_re = re.compile(r"(Bachelor|Master|BSc|MSc|BA|MA|PhD|MBA|BS|MS|B\.Tech|M\.Tech|BEng|MEng)", re.I)
+    # Expanded degree patterns
+    degree_re = re.compile(
+        r"(Bachelor|Master|BSc|MSc|BA|MA|PhD|MBA|BS|MS|MPhil|B\.Tech|M\.Tech|BEng|MEng|B\.E\.|M\.E\.|" +
+        r"Associate|Diploma|Certificate|Doctorate|DBA|JD|MD|BBA|MCA|BCA|B\.Sc|M\.Sc|B\.A\.|M\.A\.|" +
+        r"High School|Secondary|Higher Secondary|HSC|SSC|GCSE|A-Level|O-Level|Degree)", 
+        re.I
+    )
+    
+    # Education section markers
+    edu_section_re = re.compile(r"^(education|academic|qualification|degree|university|college)\s*:?", re.I)
+    
     lines = text.splitlines()
+    in_edu_section = False
+    
     for i, line in enumerate(lines):
-        if degree_re.search(line):
-            entry = {"raw": line.strip()}
-            years = YEAR_RE.findall(line)
+        stripped = line.strip()
+        
+        # Check if we're entering education section
+        if edu_section_re.match(stripped):
+            in_edu_section = True
+            continue
+        
+        # Check for section end
+        if in_edu_section and stripped and any(marker in stripped.lower() for marker in ['experience', 'work history', 'employment', 'skills', 'projects']):
+            in_edu_section = False
+        
+        # Look for degree mentions
+        if degree_re.search(stripped):
+            entry = {"raw": stripped}
+            
+            # Extract degree name
+            degree_match = degree_re.search(stripped)
+            if degree_match:
+                entry["degree"] = degree_match.group(1)
+            
+            # Extract years/graduation date
+            years = YEAR_RE.findall(stripped)
             if years:
                 entry["years"] = years
-            if i + 1 < len(lines):
-                nxt = lines[i + 1].strip()
-                if len(nxt) > 3:
-                    entry["institution"] = nxt
+                entry["graduation_year"] = years[-1]  # Last year is usually graduation
+            
+            # Look for month-year formats
+            month_years = MONTH_YEAR_RE.findall(stripped)
+            if month_years:
+                entry["dates"] = month_years
+            
+            # Extract institution from same line or next lines
+            institution = None
+            
+            # Try to extract from same line (after degree)
+            remaining = degree_re.sub('', stripped).strip()
+            if len(remaining) > 5:
+                # Remove years and common words
+                for year in years:
+                    remaining = remaining.replace(year, '')
+                remaining = re.sub(r'\b(in|from|at|\d{4}|[,.-])\b', ' ', remaining, flags=re.I).strip()
+                if len(remaining) > 3:
+                    institution = remaining
+            
+            # Try next 2 lines for institution
+            if not institution:
+                for j in range(i + 1, min(i + 3, len(lines))):
+                    nxt = lines[j].strip()
+                    # Skip if it's another degree or section header
+                    if degree_re.search(nxt) or edu_section_re.match(nxt):
+                        break
+                    if 5 < len(nxt) < 150 and not nxt.startswith(('-', '•', '*')):
+                        institution = nxt
+                        break
+            
+            if institution:
+                entry["institution"] = institution
+            
             out.append(entry)
+    
     return out
 
 
 def extract_experience(text: str) -> Tuple[List[dict], float, List[Tuple[datetime, datetime]]]:
     timeline = []
     date_ranges: List[Tuple[datetime, datetime]] = []
-    for line in text.splitlines():
-        m = YEAR_RANGE_RE.search(line)
+    
+    # Common job title keywords
+    job_title_keywords = ['engineer', 'developer', 'manager', 'analyst', 'specialist', 'consultant', 
+                          'architect', 'lead', 'senior', 'junior', 'intern', 'associate', 'director',
+                          'coordinator', 'supervisor', 'executive', 'officer', 'administrator', 'designer']
+    
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Look for year ranges
+        m = YEAR_RANGE_RE.search(stripped)
         if not m:
             continue
-        start = int(m.group(1))
-        end_raw = m.group(2)
-        end = datetime.now().year if end_raw.lower() in ("present", "current") else int(end_raw)
-        sdt = datetime(start, 1, 1)
-        edt = datetime(end, 12, 31)
-        date_ranges.append((sdt, edt))
-        timeline.append({"period": m.group(0), "raw": line.strip()})
+        
+        try:
+            start = int(m.group(1))
+            end_raw = m.group(2).strip()
+            
+            # Parse end date
+            if end_raw.lower() in ("present", "current", "now", "ongoing", "till date", "till now"):
+                end = datetime.now().year
+            else:
+                end = int(end_raw)
+            
+            # Validate years
+            if not (1970 <= start <= datetime.now().year and 1970 <= end <= datetime.now().year + 1):
+                continue
+            
+            if start > end:
+                continue
+            
+            sdt = datetime(start, 1, 1)
+            edt = datetime(end, 12, 31)
+            date_ranges.append((sdt, edt))
+            
+            # Try to extract job title and company
+            job_title = None
+            company = None
+            
+            # Look in same line
+            line_without_dates = YEAR_RANGE_RE.sub('', stripped).strip()
+            line_without_dates = re.sub(r'[|•●◦▪▫-]', '', line_without_dates).strip()
+            
+            if any(keyword in line_without_dates.lower() for keyword in job_title_keywords):
+                job_title = line_without_dates
+            
+            # Look for company in next line
+            if i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                # If next line doesn't have dates and is reasonable length, it might be company
+                if not YEAR_RANGE_RE.search(next_line) and 3 < len(next_line) < 100:
+                    company = next_line
+            
+            # Look for job title in previous line
+            if not job_title and i > 0:
+                prev_line = lines[i - 1].strip()
+                if any(keyword in prev_line.lower() for keyword in job_title_keywords) and len(prev_line) < 100:
+                    job_title = prev_line
+            
+            entry = {
+                "period": m.group(0), 
+                "raw": stripped,
+                "start_year": start,
+                "end_year": end,
+                "duration_years": round((edt - sdt).days / 365.25, 1)
+            }
+            
+            if job_title:
+                entry["title"] = job_title
+            if company:
+                entry["company"] = company
+            
+            timeline.append(entry)
+            
+        except (ValueError, AttributeError):
+            # Skip malformed dates
+            continue
+    
+    # Calculate total years of experience
     years = sum(max(0, (e - s).days) / 365.25 for s, e in date_ranges)
+    
+    # Detect employment gaps (6+ months)
     gaps = []
     if len(date_ranges) >= 2:
         rs = sorted(date_ranges, key=lambda x: x[0])
         for (s1, e1), (s2, e2) in zip(rs, rs[1:]):
-            if (s2 - e1).days > 183:
+            gap_days = (s2 - e1).days
+            if gap_days > 183:  # More than 6 months
                 gaps.append((e1, s2))
+    
     return timeline, years, gaps
 
 
 def tag_skills(text: str) -> Dict[str, List[str]]:
-    t = text.lower()
-    tags = {}
-    for cat, words in SKILLS.items():
-        found = [w for w in words if w in t]
-        if found:
-            tags[cat] = sorted(set(found))
-    return tags
+    """ULTRA-ENHANCED skill tagging with 10x more dynamic detection - captures technologies, frameworks, methodologies, and context"""
+    found = {cat: [] for cat in SKILLS}
+    found["dynamic_skills"] = []
+    found["frameworks"] = []
+    found["methodologies"] = []
+    found["tools"] = []
+    found["platforms"] = []
+    found["certifications"] = []
+    
+    text_lower = text.lower()
+    lines = text.split('\n')
+    
+    # 1. Fixed dictionary matching (original)
+    for category, skills_list in SKILLS.items():
+        for skill in skills_list:
+            pattern = r'\b' + re.escape(skill.lower()) + r'\b'
+            if re.search(pattern, text_lower):
+                found[category].append(skill)
+    
+    # 2. MASSIVELY ENHANCED DYNAMIC EXTRACTION
+    
+    # Acronyms (2-8 uppercase letters) - expanded range
+    acronyms = re.findall(r'\b[A-Z]{2,8}\b', text)
+    exclude_acronyms = ['CV', 'USA', 'UK', 'MBA', 'BSC', 'MSC', 'PHD', 'CEO', 'CTO', 'CFO', 'VP', 'HR', 'IT', 'PM', 'QA', 'BA', 'MA']
+    tech_acronyms = [a for a in acronyms if a not in exclude_acronyms]
+    
+    # CamelCase technologies (e.g., TensorFlow, PyTorch, GitHub, MongoDB)
+    camel_case = re.findall(r'\b[A-Z][a-z]+[A-Z][a-zA-Z]*\b', text)
+    
+    # Versioned technologies (e.g., Python 3.9, Node.js 16, Java 11, .NET 6)
+    versioned = re.findall(r'\b([A-Za-z\.]+[\w]*)\s*[v]?[\d]+(?:\.[\d]+)*\b', text)
+    
+    # Hyphenated tools (e.g., scikit-learn, test-driven, cross-platform)
+    hyphenated = re.findall(r'\b[a-z]+(?:-[a-z]+)+\b', text_lower)
+    
+    # Dotted technologies (e.g., Node.js, Vue.js, ASP.NET, D3.js)
+    dotted = re.findall(r'\b[A-Za-z]+\.[A-Za-z]+\b', text)
+    
+    # Programming patterns (e.g., "in Python", "using Java", "with React")
+    context_skills = []
+    for pattern in [r'\b(?:in|using|with|via|on)\s+([A-Z][a-z\w]+)\b', r'\b([A-Z][a-z\w]+)\s+(?:development|programming|coding|scripting)\b']:
+        context_skills.extend(re.findall(pattern, text))
+    
+    # Framework indicators (e.g., "Django framework", "React library", "Express.js")
+    frameworks = re.findall(r'\b([A-Z][a-z\w\.]+)\s+(?:framework|library|toolkit|platform|engine)\b', text, re.IGNORECASE)
+    found["frameworks"] = list(set(frameworks))[:15]
+    
+    # Methodology indicators (Agile, Scrum, TDD, CI/CD, DevOps practices)
+    methodologies = re.findall(r'\b(Agile|Scrum|Kanban|Waterfall|TDD|BDD|CI/CD|DevOps|GitFlow|Microservices|Serverless|RESTful|GraphQL|SOLID|DRY|KISS|LEAN|Six Sigma|ITIL|SAFe)\b', text, re.IGNORECASE)
+    found["methodologies"] = list(set([m.upper() if len(m) <= 4 else m.title() for m in methodologies]))
+    
+    # Tool/Software patterns ("Proficient in X", "Expert with Y", "Experience using Z")
+    proficiency_tools = []
+    for pattern in [r'(?:proficient|expert|experienced|skilled)\s+(?:in|with|using)\s+([A-Z][a-z\w\.\-]+)', r'(?:knowledge|experience)\s+(?:of|in|with)\s+([A-Z][a-z\w\.\-]+)']:
+        proficiency_tools.extend(re.findall(pattern, text, re.IGNORECASE))
+    found["tools"] = list(set(proficiency_tools))[:15]
+    
+    # Cloud/Database services (AWS S3, Azure Blob, GCP BigQuery, AWS Lambda)
+    cloud_services = re.findall(r'\b(AWS|Azure|GCP|Google Cloud)\s+([A-Z][a-z\w]+)\b', text)
+    cloud_tech = [f"{svc[0]} {svc[1]}" for svc in cloud_services]
+    
+    # Operating Systems & Platforms
+    os_platforms = re.findall(r'\b(Linux|Unix|Windows|macOS|iOS|Android|Ubuntu|CentOS|RedHat|Debian|Fedora|Arch|FreeBSD|Solaris)\b', text, re.IGNORECASE)
+    found["platforms"] = list(set([s.title() for s in os_platforms]))
+    
+    # Build & Deployment Tools
+    build_tools = re.findall(r'\b(Jenkins|CircleCI|TravisCI|GitLab CI|GitHub Actions|Bamboo|TeamCity|Gradle|Maven|Webpack|Gulp|npm|yarn|pip|Terraform|Ansible|Chef|Puppet|CloudFormation)\b', text, re.IGNORECASE)
+    
+    # Databases (including NoSQL and NewSQL)
+    databases = re.findall(r'\b(MongoDB|PostgreSQL|MySQL|Oracle|SQL Server|Redis|Cassandra|DynamoDB|Elasticsearch|Neo4j|CouchDB|MariaDB|SQLite|Firestore|Snowflake|BigQuery|Redshift)\b', text, re.IGNORECASE)
+    
+    # Design & Testing Tools
+    design_test = re.findall(r'\b(Figma|Sketch|Adobe XD|InVision|Photoshop|Illustrator|Selenium|Cypress|Jest|Mocha|Pytest|JUnit|TestNG|Postman|SoapUI|LoadRunner|JMeter)\b', text, re.IGNORECASE)
+    
+    # Container & Orchestration
+    containers = re.findall(r'\b(Docker|Kubernetes|K8s|Helm|Rancher|OpenShift|Podman|Nomad|Compose|Swarm)\b', text, re.IGNORECASE)
+    
+    # Monitoring & Logging
+    monitoring = re.findall(r'\b(Grafana|Prometheus|ELK|Kibana|Logstash|Datadog|New Relic|Splunk|CloudWatch|AppDynamics|Nagios|Zabbix)\b', text, re.IGNORECASE)
+    
+    # Message Queues & Streaming
+    messaging = re.findall(r'\b(Kafka|RabbitMQ|Redis|ActiveMQ|ZeroMQ|Pulsar|MQTT|NATS)\b', text, re.IGNORECASE)
+    
+    # API & Web Services
+    api_tools = re.findall(r'\b(REST|GraphQL|gRPC|SOAP|Swagger|OpenAPI|Postman|Insomnia)\b', text, re.IGNORECASE)
+    
+    # Version Control & Collaboration
+    vcs_tools = re.findall(r'\b(Git|GitHub|GitLab|Bitbucket|SVN|Mercurial|Perforce|Jira|Confluence|Slack|Teams)\b', text, re.IGNORECASE)
+    
+    # Skills from bullet points (lines starting with bullet characters)
+    bullet_skills = []
+    for line in lines:
+        if re.match(r'^\s*[•●○▪▫■□‣⁃\\-\\*]', line):
+            # Extract capitalized words/phrases from bullet points
+            caps = re.findall(r'\b[A-Z][a-z\w\\.\\-]*(?:\s+[A-Z][a-z\w\\.\\-]*)*\b', line)
+            bullet_skills.extend([c for c in caps if len(c) > 2 and c not in exclude_acronyms])
+    
+    # Skills from "Skills:" section lines
+    skill_section_items = []
+    in_skills_section = False
+    for line in lines:
+        if re.search(r'^\s*(?:Technical\s+)?Skills?\s*:?\s*$', line, re.IGNORECASE):
+            in_skills_section = True
+            continue
+        if in_skills_section:
+            if re.match(r'^\s*(?:Education|Experience|Projects|Certifications|Work History|Employment)', line, re.IGNORECASE):
+                break
+            # Extract from comma/pipe/semicolon separated lists
+            items = re.split(r'[,|;]', line)
+            for item in items:
+                cleaned = item.strip(' •●○▪▫■□‣⁃\\-\\*\\t')
+                if cleaned and len(cleaned) > 2 and not re.match(r'^\d+$', cleaned):
+                    skill_section_items.append(cleaned)
+    
+    # Programming languages with context (e.g., "3 years of Python", "proficient in Java")
+    lang_context = re.findall(r'(?:\d+\s+years?\s+(?:of|in|with)\s+|proficient\s+in\s+|expert\s+in\s+|experience\s+with\s+)([A-Z][a-z\w\+\#]+)', text, re.IGNORECASE)
+    
+    # Certifications embedded in skills
+    cert_patterns = re.findall(r'\b(AWS Certified|Azure Certified|Google Cloud Certified|Oracle Certified|Microsoft Certified|Cisco Certified|CompTIA|PMP|CISSP|CEH|CKA|CKAD)\b', text, re.IGNORECASE)
+    found["certifications"] = list(set([c.title() for c in cert_patterns]))[:10]
+    
+    # Combine all dynamic skills
+    all_dynamic = (
+        tech_acronyms + camel_case + [v for v in versioned if v] + 
+        hyphenated + dotted + context_skills + cloud_tech + 
+        [s.title() for s in build_tools] + 
+        [s.title() for s in databases] + 
+        [s.title() for s in design_test] + 
+        [s.title() for s in containers] + 
+        [s.title() for s in monitoring] + 
+        [s.title() for s in messaging] + 
+        [s.upper() if len(s) <= 4 else s.title() for s in api_tools] +
+        [s.title() for s in vcs_tools] +
+        bullet_skills[:30] +  # Limit bullet skills
+        skill_section_items[:40] +  # Limit section skills
+        [s.title() for s in lang_context]
+    )
+    
+    # Deduplicate and filter
+    seen = set()
+    unique_dynamic = []
+    common_words = {'and', 'the', 'for', 'with', 'from', 'have', 'this', 'that', 'will', 'your', 'can', 'all', 'not', 'but', 'are', 'was', 'were', 'been', 'has', 'had', 'which', 'also', 'their', 'there', 'where', 'when', 'what', 'who', 'how', 'why', 'more', 'most', 'some', 'such', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'over'}
+    
+    for skill in all_dynamic:
+        skill_clean = str(skill).strip()
+        skill_lower = skill_clean.lower()
+        # Filter out common words and very short items
+        if (len(skill_clean) >= 2 and 
+            skill_lower not in common_words and
+            skill_clean not in seen and
+            not skill_clean.isdigit()):
+            seen.add(skill_clean)
+            unique_dynamic.append(skill_clean)
+    
+    found["dynamic_skills"] = unique_dynamic[:60]  # Increased limit to 60
+    
+    return found
 
 
 def cosine(a, b) -> float:
@@ -749,23 +1174,46 @@ def extract_entities_with_spacy(text: str) -> Dict[str, List[str]]:
 
 
 def analyze_text_readability(text: str) -> Dict[str, float]:
-    """Analyze CV readability using textstat"""
+    """Analyze CV readability using textstat - ENHANCED with more metrics"""
     if not TEXTSTAT_AVAILABLE:
-        return {"flesch_score": 0, "grade_level": 0, "reading_time": 0}
+        return {"flesch_reading_ease": 0, "flesch_kincaid_grade": 0, "reading_time": 0, "word_count": 0, "sentence_count": 0}
     
     try:
+        flesch = textstat.flesch_reading_ease(text)
+        grade = textstat.flesch_kincaid_grade(text)
+        smog = textstat.smog_index(text)
+        coleman = textstat.coleman_liau_index(text)
+        reading_time = textstat.reading_time(text, ms_per_char=14.69)
+        sentences = textstat.sentence_count(text)
+        words = textstat.lexicon_count(text, removepunct=True)
+        syllables = textstat.syllable_count(text)
+        
+        # Additional advanced metrics
+        automated_readability = textstat.automated_readability_index(text)
+        dale_chall = textstat.dale_chall_readability_score(text)
+        difficult_words = textstat.difficult_words(text)
+        linsear_write = textstat.linsear_write_formula(text)
+        gunning_fog = textstat.gunning_fog(text)
+        
         return {
-            "flesch_score": textstat.flesch_reading_ease(text),
-            "flesch_grade": textstat.flesch_kincaid_grade(text),
-            "smog_index": textstat.smog_index(text),
-            "coleman_liau": textstat.coleman_liau_index(text),
-            "reading_time_min": textstat.reading_time(text, ms_per_char=14.69),
-            "sentence_count": textstat.sentence_count(text),
-            "word_count": textstat.lexicon_count(text),
-            "syllable_count": textstat.syllable_count(text)
+            "flesch_reading_ease": flesch,
+            "flesch_kincaid_grade": grade,
+            "smog_index": smog,
+            "coleman_liau": coleman,
+            "reading_time": reading_time,
+            "sentence_count": sentences,
+            "word_count": words,
+            "syllable_count": syllables,
+            "automated_readability_index": automated_readability,
+            "dale_chall_score": dale_chall,
+            "difficult_words": difficult_words,
+            "linsear_write": linsear_write,
+            "gunning_fog": gunning_fog,
+            "avg_words_per_sentence": words / sentences if sentences > 0 else 0,
+            "avg_syllables_per_word": syllables / words if words > 0 else 0
         }
-    except Exception:
-        return {"flesch_score": 0, "grade_level": 0, "reading_time": 0}
+    except Exception as e:
+        return {"flesch_reading_ease": 0, "flesch_kincaid_grade": 0, "reading_time": 0, "word_count": 0, "sentence_count": 0, "error": str(e)}
 
 
 def detect_language(text: str) -> str:
@@ -815,26 +1263,170 @@ def advanced_similarity_with_faiss(jd: str, cvs: List[str]) -> List[float]:
 
 
 def extract_certifications(text: str) -> List[str]:
-    """Extract professional certifications"""
-    cert_patterns = [
-        r"AWS Certified",
-        r"Azure Certified",
-        r"Google Cloud Certified",
-        r"PMP",
-        r"Scrum Master",
-        r"CISSP",
-        r"CompTIA",
-        r"Certified .{1,50}Engineer",
-        r"Certified .{1,50}Developer",
-        r"Professional Certificate"
+    """DYNAMIC certification extraction - extracts ANY certification from sections + pattern matching"""
+    certifications = []
+    
+    # Strategy 1: Section-based extraction (MOST IMPORTANT - extracts EVERYTHING from cert sections)
+    cert_section_markers = [
+        r"^(?:professional\s+)?certifications?\s*:?\s*$",
+        r"^licenses?\s+(?:and|&|,)\s+certifications?\s*:?\s*$",
+        r"^certificates?\s*:?\s*$",
+        r"^professional\s+development\s*:?\s*$",
+        r"^training\s+(?:and|&)\s+certifications?\s*:?\s*$",
+        r"^credentials?\s*:?\s*$",
     ]
     
-    certifications = []
-    for pattern in cert_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        certifications.extend(matches)
+    lines = text.split('\n')
+    in_cert_section = False
+    cert_start_line = -1
     
-    return list(set(certifications))
+    # Section terminators
+    other_section_keywords = ['experience', 'education', 'skills', 'work history', 'employment', 
+                              'projects', 'summary', 'profile', 'objective', 'achievements', 
+                              'publications', 'references', 'languages', 'interests', 'hobbies']
+    
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        
+        # Check if entering certification section
+        if not in_cert_section:
+            for marker in cert_section_markers:
+                if re.match(marker, line_stripped, re.I):
+                    in_cert_section = True
+                    cert_start_line = i
+                    break
+            continue
+        
+        # Check if leaving certification section
+        if in_cert_section:
+            # End on new major section
+            is_new_section = False
+            for keyword in other_section_keywords:
+                if re.match(rf'^{keyword}', line_stripped, re.I):
+                    is_new_section = True
+                    break
+            
+            if is_new_section:
+                in_cert_section = False
+                continue
+            
+            # End if we see another section header pattern (all caps, followed by colon)
+            if re.match(r'^[A-Z\s]{3,30}:?$', line_stripped) and len(line_stripped) < 40:
+                in_cert_section = False
+                continue
+            
+            # Extract certification from this line (DYNAMIC - takes anything)
+            if line_stripped and len(line_stripped) > 2:
+                # Skip pure dates or page numbers
+                if re.match(r'^\d{1,3}$', line_stripped):  # Page number
+                    continue
+                if re.match(r'^\d{4}\s*[-–]\s*\d{4}$', line_stripped):  # Just dates
+                    continue
+                if re.match(r'^\d{1,2}/\d{4}$', line_stripped):  # Date format
+                    continue
+                
+                # Clean the line
+                cert_line = line_stripped
+                
+                # Remove common bullets and markers
+                cert_line = re.sub(r'^[\u2022\u25cf\u25e6\u25aa\u25ab\-\*•◦▪▫→➢⮚]\s*', '', cert_line)
+                cert_line = re.sub(r'^\d+[.)\s]+', '', cert_line)  # Remove numbering
+                
+                # Remove trailing dates in common formats
+                cert_line = re.sub(r',?\s*\d{4}\s*$', '', cert_line)
+                cert_line = re.sub(r',?\s*\d{1,2}/\d{4}\s*$', '', cert_line)
+                cert_line = re.sub(r',?\s*\(\d{4}\)\s*$', '', cert_line)
+                cert_line = re.sub(r'\s*[-–]\s*\d{4}\s*$', '', cert_line)
+                
+                # Remove "Issued by" or "by" suffixes
+                cert_line = re.sub(r'\s*[-–]\s*issued\s+by\s+[^,]+$', '', cert_line, flags=re.I)
+                cert_line = re.sub(r'\s*\(issued\s+by\s+[^)]+\)\s*$', '', cert_line, flags=re.I)
+                
+                cert_line = cert_line.strip()
+                
+                # Must be reasonable length
+                if 3 <= len(cert_line) <= 200:
+                    # Must have at least one letter
+                    if re.search(r'[a-zA-Z]', cert_line):
+                        certifications.append(cert_line)
+    
+    # Strategy 2: Keyword-based pattern extraction (backup for certs mentioned outside sections)
+    cert_keywords = [
+        r"certified", r"certification", r"certificate", r"credential", r"licensed", 
+        r"accredited", r"qualified", r"professional\s+\w+"
+    ]
+    
+    # Look for lines containing certification keywords
+    for line in lines:
+        line_stripped = line.strip()
+        if 10 <= len(line_stripped) <= 200:
+            # Check if contains cert keyword
+            has_cert_keyword = any(re.search(rf'\b{kw}\b', line_stripped, re.I) for kw in cert_keywords)
+            
+            if has_cert_keyword:
+                # Extract potential certification
+                cert_candidate = line_stripped
+                
+                # Clean up
+                cert_candidate = re.sub(r'^[\u2022\u25cf\u25e6\u25aa\u25ab\-\*•◦▪▫→]\s*', '', cert_candidate)
+                cert_candidate = re.sub(r'^\d+[.)\s]+', '', cert_candidate)
+                cert_candidate = re.sub(r',?\s*\d{4}\s*$', '', cert_candidate)
+                cert_candidate = cert_candidate.strip()
+                
+                if 5 <= len(cert_candidate) <= 200:
+                    certifications.append(cert_candidate)
+    
+    # Strategy 3: Common certification acronyms (even if standalone)
+    acronym_patterns = [
+        r'\b(AWS|Azure|GCP|PMP|CAPM|CSM|CSPO|PSM|CISSP|CISM|CISA|CEH|OSCP|' +
+        r'CCNA|CCNP|CCIE|RHCSA|RHCE|CKA|CKAD|CKS|CompTIA|ITIL|' +
+        r'OCA|OCP|CPA|CFA|CFP|CMA|FRM)(?:\s+Certified)?(?:\s+[A-Za-z\s]+)?'
+    ]
+    
+    for pattern in acronym_patterns:
+        matches = re.findall(pattern, text, re.I)
+        for match in matches:
+            if 2 <= len(match) <= 100:
+                certifications.append(match.strip())
+    
+    # Strategy 4: "Certified X" or "X Certification" patterns
+    generic_patterns = [
+        r'Certified\s+[A-Z][A-Za-z\s]{2,60}(?:Engineer|Developer|Administrator|Architect|Specialist|Professional|Practitioner|Consultant|Analyst|Expert)',
+        r'[A-Z][A-Za-z\s]{2,40}\s+Certification',
+        r'[A-Z][A-Za-z\s]{2,40}\s+Professional\s+Certificate',
+    ]
+    
+    for pattern in generic_patterns:
+        matches = re.findall(pattern, text, re.I)
+        for match in matches:
+            if 5 <= len(match) <= 150:
+                certifications.append(match.strip())
+    
+    # Deduplicate and clean
+    unique_certs = []
+    seen_lower = set()
+    
+    for cert in certifications:
+        cert = cert.strip()
+        cert_lower = cert.lower()
+        
+        # Skip if empty or too short
+        if len(cert) < 2:
+            continue
+        
+        # Skip if already seen
+        if cert_lower in seen_lower:
+            continue
+        
+        # Skip if it's just common words
+        skip_words = {'certified', 'certification', 'certificate', 'professional', 'licensed', 'the', 'and', 'or'}
+        if cert_lower in skip_words:
+            continue
+        
+        unique_certs.append(cert)
+        seen_lower.add(cert_lower)
+    
+    return unique_certs
 
 
 def calculate_cv_quality_score(text: str, readability: Dict, entities: Dict) -> float:
@@ -1130,30 +1722,51 @@ if 'view_mode' not in st.session_state:
 
 # ========================= SIDEBAR =========================
 st.sidebar.markdown("---")
-st.sidebar.markdown("###Developer")
+st.sidebar.markdown("Developer")
 st.sidebar.markdown("**LABIB BIN SHAHED**")
 st.sidebar.markdown("labib-x@protonmail.com")
 st.sidebar.markdown("---")
 
 # ========================= MAIN CONTENT AREA =========================
-# Mode Selector
-st.markdown("## 🎯 VitaSort - CV Screening System")
-mode_col1, mode_col2, mode_col3 = st.columns([1, 2, 1])
-with mode_col1:
-    st.empty()
-with mode_col2:
+st.markdown("---")
+
+# ========================= CONTROL PANEL =========================
+control_tab1, control_tab2, control_tab3, control_tab4, control_tab5, control_tab6 = st.tabs([
+    "🎛️ Mode", "📊 Analytics", "⚡ Presets", "⚙️ Scoring", "🔬 Features", "⚡ Actions"
+])
+
+# ====== Tab 1: Mode Selection ======
+with control_tab1:
+    st.markdown("### 🎛️ Mode Selection")
+    st.info("Choose between **Forensics Mode** (detailed live analysis) or **Default Mode** (simplified view).")
+    
     mode = st.radio(
-        "",
+        "Select analysis mode",
         ["🔬 Forensics Mode", "📊 Default Mode"],
         horizontal=True,
-        key="mode_selector"
+        key="mode_selector",
+        label_visibility="collapsed"
     )
     # Clean mode name
     mode = "Forensics" if "Forensics" in mode else "Default"
-with mode_col3:
-    st.empty()
-
-st.markdown("---")
+    
+    # Mode descriptions
+    if "Forensics" in mode:
+        st.success("""
+        **🔬 Forensics Mode Active**
+        - Live HUD with real-time metrics
+        - Comprehensive analytics dashboard
+        - Advanced filtering and search
+        - Detailed candidate comparisons
+        """)
+    else:
+        st.success("""
+        **📊 Default Mode Active**
+        - Simplified interface
+        - Quick candidate review
+        - Essential metrics only
+        - Streamlined workflow
+        """)
 
 if mode == "Forensics":
     # Live HUD Header
@@ -1175,15 +1788,9 @@ if mode == "Forensics":
             avg = sum([r["score"]["overall"] for r in st.session_state.last_results]) / total if total > 0 else 0
             st.metric("📈 Avg", f"{avg:.0%}", delta="Good" if avg >= 0.70 else "Low")
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # ========================= CONTROL PANEL =========================
- 
-    
-    control_tab1, control_tab2, control_tab3, control_tab4, control_tab5 = st.tabs([
-        "📊 Analytics", "⚡ Presets", "⚙️ Scoring", "🔬 Features", "⚡ Actions"
-    ])
-    
-    with control_tab1:
+
+    # ====== Tab 2: Live Pool Analytics ======
+    with control_tab2:
         # Live Pool Analytics
         if st.session_state.last_results:
             results = st.session_state.last_results
@@ -1230,7 +1837,8 @@ if mode == "Forensics":
             view_options = ["All", "⭐ Bookmarked", "🟢 Strong (≥80%)", "🟡 Average (60-80%)", "🔴 Weak (<60%)", "🌟 Shortlisted", "📞 Interview", "❌ Rejected"]
             st.session_state.view_mode = st.selectbox("Filter View", view_options, key="view_mode_select")
     
-    with control_tab2:
+    # ====== Tab 3: Filter Presets ======
+    with control_tab3:
         st.markdown("### ⚡ Filter Presets Management")
         
         # Quick Presets
@@ -1379,7 +1987,8 @@ if mode == "Forensics":
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
     
-    with control_tab3:
+    # ====== Tab 4: Scoring Configuration ======
+    with control_tab4:
         st.markdown("### ⚙️ Scoring Configuration")
         
         score_col1, score_col2 = st.columns([1, 2])
@@ -1405,7 +2014,8 @@ if mode == "Forensics":
                 else:
                     st.success(f"✓ Total: {total:.2f}")
     
-    with control_tab4:
+    # ====== Tab 5: Advanced Features ======
+    with control_tab5:
         st.markdown("### 🔬 Advanced Features")
         
         st.markdown("**🎯 AI-Powered Features:**")
@@ -1433,7 +2043,8 @@ if mode == "Forensics":
             enable_blind = st.checkbox("👤 Blind Screening", value=False, key="blind")
             enable_hopping = st.checkbox("🔄 Job Hopping Detection", value=True, key="hop")
     
-    with control_tab5:
+    # ====== Tab 6: Quick Actions ======
+    with control_tab6:
         st.markdown("### ⚡ Quick Actions")
         
         action_row1_col1, action_row1_col2, action_row1_col3, action_row1_col4 = st.columns(4)
@@ -1465,7 +2076,7 @@ if mode == "Forensics":
     
     # Quick Apply Preset Bar
     if st.session_state.saved_filter_presets or st.session_state.filter_presets:
-        st.markdown("### ⚡ Quick Apply Preset")
+
         preset_apply_cols = st.columns([3, 1, 1])
         with preset_apply_cols[0]:
             all_presets = {**st.session_state.filter_presets, **st.session_state.saved_filter_presets}
@@ -1891,39 +2502,47 @@ if mode == "Forensics":
                     
                     for idx, r in enumerate(top_candidates, 1):
                         with st.expander(f"#{idx} {r['contacts'].get('name', 'Unknown')} — {r['filename']}", expanded=(idx <= 3)):
-                            # Quality Score at top
+                            # Quality Score at top - FIXED LAYOUT
                             if r.get("cv_quality_score"):
-                                col_q1, col_q2, col_q3 = st.columns([1, 2, 1])
+                                quality_pct = r["cv_quality_score"] * 100
+                                
+                                # Use full width for gauge to prevent overflow
+                                col_q1, col_q2 = st.columns([1, 2])
                                 with col_q1:
-                                    quality_pct = r["cv_quality_score"] * 100
                                     st.metric("📊 CV Quality", f"{quality_pct:.1f}%", 
                                             delta="High" if quality_pct >= 75 else ("Medium" if quality_pct >= 50 else "Low"))
+                                    st.metric("🎯 Overall Score", f"{r['score']['overall']*100:.1f}%")
+                                
                                 with col_q2:
-                                    # Quality gauge
+                                    # Quality gauge with fixed dimensions
                                     fig_gauge = go.Figure(go.Indicator(
                                         mode="gauge+number",
                                         value=quality_pct,
                                         domain={'x': [0, 1], 'y': [0, 1]},
-                                        title={'text': "Quality Score"},
+                                        title={'text': "Quality Score", 'font': {'size': 14}},
+                                        number={'font': {'size': 24}},
                                         gauge={
-                                            'axis': {'range': [None, 100]},
-                                            'bar': {'color': "darkblue"},
+                                            'axis': {'range': [None, 100], 'tickfont': {'size': 10}},
+                                            'bar': {'color': "darkblue", 'thickness': 0.7},
                                             'steps': [
                                                 {'range': [0, 50], 'color': "#FFE5E5"},
                                                 {'range': [50, 75], 'color': "#FFF4E5"},
                                                 {'range': [75, 100], 'color': "#E5F5E5"}
                                             ],
                                             'threshold': {
-                                                'line': {'color': "red", 'width': 4},
+                                                'line': {'color': "red", 'width': 3},
                                                 'thickness': 0.75,
                                                 'value': 70
                                             }
                                         }
                                     ))
-                                    fig_gauge.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=20))
-                                    st.plotly_chart(fig_gauge, use_container_width=True)
-                                with col_q3:
-                                    st.metric("🎯 Overall", f"{r['score']['overall']*100:.1f}%")
+                                    fig_gauge.update_layout(
+                                        height=180, 
+                                        margin=dict(l=10, r=10, t=40, b=10),
+                                        paper_bgcolor="rgba(0,0,0,0)",
+                                        font=dict(size=11)
+                                    )
+                                    st.plotly_chart(fig_gauge, use_container_width=True, key=f"gauge_{idx}_{r['filename']}")
                             
                             # Language & Certifications Row
                             if r.get("language") or r.get("certifications"):
@@ -1983,15 +2602,47 @@ if mode == "Forensics":
                                 with col_r4:
                                     st.metric("Reading Time", f"{read.get('reading_time', 0):.1f} min")
                                 
-                                # Additional readability metrics
-                                with st.expander("Advanced Readability Metrics"):
-                                    col_adv1, col_adv2 = st.columns(2)
+                                # Additional readability metrics - MASSIVELY ENHANCED
+                                with st.expander("📊 Advanced Readability Metrics (10+ Metrics)", expanded=False):
+                                    st.markdown("**Grade Level Indices:**")
+                                    col_adv1, col_adv2, col_adv3 = st.columns(3)
                                     with col_adv1:
                                         st.write(f"**SMOG Index:** {read.get('smog_index', 0):.1f}")
                                         st.write(f"**Coleman-Liau:** {read.get('coleman_liau', 0):.1f}")
+                                        st.write(f"**Gunning Fog:** {read.get('gunning_fog', 0):.1f}")
                                     with col_adv2:
-                                        st.write(f"**Sentences:** {read.get('sentence_count', 0)}")
-                                        st.write(f"**Syllables:** {read.get('syllable_count', 0):,}")
+                                        st.write(f"**ARI Score:** {read.get('automated_readability_index', 0):.1f}")
+                                        st.write(f"**Linsear Write:** {read.get('linsear_write', 0):.1f}")
+                                        st.write(f"**Dale-Chall:** {read.get('dale_chall_score', 0):.1f}")
+                                    with col_adv3:
+                                        st.write(f"**Difficult Words:** {read.get('difficult_words', 0):,}")
+                                        st.write(f"**Avg Words/Sentence:** {read.get('avg_words_per_sentence', 0):.1f}")
+                                        st.write(f"**Avg Syllables/Word:** {read.get('avg_syllables_per_word', 0):.2f}")
+                                    
+                                    st.markdown("---")
+                                    st.markdown("**Structural Analysis:**")
+                                    col_struct1, col_struct2, col_struct3 = st.columns(3)
+                                    with col_struct1:
+                                        st.metric("Total Sentences", f"{read.get('sentence_count', 0):,}")
+                                    with col_struct2:
+                                        st.metric("Total Words", f"{read.get('word_count', 0):,}")
+                                    with col_struct3:
+                                        st.metric("Total Syllables", f"{read.get('syllable_count', 0):,}")
+                                    
+                                    # Readability interpretation
+                                    st.markdown("---")
+                                    st.markdown("**📈 Interpretation Guide:**")
+                                    if flesch >= 80:
+                                        st.success("✅ **Very Easy** - Suitable for all audiences (5th grade level)")
+                                    elif flesch >= 60:
+                                        st.info("✅ **Easy** - Conversational for most adults (8th-9th grade)")
+                                    elif flesch >= 40:
+                                        st.warning("⚠️ **Medium** - Requires college-level reading (10th-12th grade)")
+                                    else:
+                                        st.error("❌ **Hard** - Very difficult, requires advanced education (College+)")
+                                    
+                                    if read.get("error"):
+                                        st.error(f"⚠️ Analysis Error: {read.get('error')}")
                     
                     # Enhanced Radar Chart for Top 5
                     st.markdown("---")
