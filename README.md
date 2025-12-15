@@ -32,21 +32,6 @@
 
 <hr>
 
-## Web Preview
-<p align="left">
-  <img src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/img/desktop%20(1).png" width="49%" />
-  <img src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/img/desktop%20(2).png" width="49%" />
-   
-<p align="left">
-<p align="left">
-  <img src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/img/desktop%20(3).png" width="49%" />
-  <img src="https://raw.githubusercontent.com/la-b-ib/VitaSort/main/preview/img/desktop%20(4).png" width="49%" />
-   
-<p align="left">
-
-<hr>
-
-
 
 
 ##  Algorithm Details
